@@ -66,10 +66,10 @@ const Personal = ({isUser, userId}) => {
   // useEffect(() => {
   //   fetchPfp();
   // }, [])
-  
+
 
   useEffect(() => {
-    axios.get(`/api/registration-info/${userId}`, { 
+    axios.get(`/api/registration-info/${userId}`, {
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${Cookies.get('access_token')}`,
@@ -81,7 +81,7 @@ const Personal = ({isUser, userId}) => {
       setMajor(fetchedProfile.major);
       setMinor(fetchedProfile.minor);
       setProfile(fetchedProfile);
-      console.log(profile.linkedin_url);
+      // console.log(profile.linkedin_url);
       // console.log("ENROLLMENT", profile.full_name);
     })
     .catch(err => {console.error(err)});
@@ -89,7 +89,7 @@ const Personal = ({isUser, userId}) => {
 
   const parseEmail = (email) => {
     return email ? email.split('@')[0] : '';
-  } 
+  }
 
   const togglePopup = () => {
     setPopupVisible(!isPopupVisible);
@@ -112,7 +112,7 @@ const Personal = ({isUser, userId}) => {
       minor: minor,
       user_id: userId
     };
-    
+
     axios.post(`/api/update-profile`, payload, {
         headers: {
             "Content-Type": "application/json",
@@ -120,7 +120,7 @@ const Personal = ({isUser, userId}) => {
             },
     })
     .then((response) => {
-        
+
     })
     .catch((err) => console.error(err));
   }
@@ -129,11 +129,16 @@ const Personal = ({isUser, userId}) => {
     if (files && files[0]) {
       setImageFile(files[0]);
       setImageFileName(files[0].name);
-
-      const storageRef = ref(storage, `photos/${parseEmail(profile.email)}/${files[0].name}`);
+      axios.get(`/api/current-user`, {
+        headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${Cookies.get('access_token')}`,
+        },
+    })
+    .then((response) => {
+      const storageRef = ref(storage, `photos/${response.data.uid}`);
       const uploadTask = uploadBytesResumable(storageRef, files[0]);
-
-      uploadTask.on("state_changed", 
+      uploadTask.on("state_changed",
         (snapshot) => {
           //can track progress here
           const prog = Math.round(
@@ -145,7 +150,10 @@ const Personal = ({isUser, userId}) => {
         },
         () => {
           getDownloadURL(uploadTask.snapshot.ref).then((url) => {
-            
+            setProfile((prevProfile) => ({
+              ...prevProfile,
+              profile_img_url: url,
+            }));
             fetch("/api/update-pfp", {
               method: "POST",
               credentials: "include",
@@ -153,13 +161,15 @@ const Personal = ({isUser, userId}) => {
               headers: {
                 "Content-Type": "application/json",
                 "Authorization": `Bearer ${Cookies.get('access_token')}`,
-              }, 
-              body: JSON.stringify({profile_img_url: url 
+              },
+              body: JSON.stringify({profile_img_url: url
               }),
-            },)
+            },);
           });
         }
       );
+    })
+    .catch((err) => console.error(err));
     }
     setOpened(false);
   };
@@ -177,12 +187,12 @@ const Personal = ({isUser, userId}) => {
 
     return `${year}-${month}-${day}`;
   }
-  
+
   function isValidDateFormat(date) {
       const regex = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
       return regex.test(date);
   }
-  
+
 
   return (
     <>
@@ -221,7 +231,7 @@ const Personal = ({isUser, userId}) => {
                     <div className="popup-content">
                       <div className="form-group">
                         <p>Name</p>
-                        <input 
+                        <input
                           type="text"
                           name="name"
                           value={profile.full_name}
@@ -230,7 +240,7 @@ const Personal = ({isUser, userId}) => {
                       </div>
                       <div className="form-group">
                         <p>Pronouns</p>
-                        <input 
+                        <input
                           type="text"
                           name="pronouns"
                           value={profile.pronouns}
@@ -270,7 +280,7 @@ const Personal = ({isUser, userId}) => {
                       />
                       <div className="form-group">
                         <p>College</p>
-                        <input 
+                        <input
                           type="text"
                           name="college"
                           value={profile.college}
@@ -279,7 +289,7 @@ const Personal = ({isUser, userId}) => {
                       </div>
                       <div className="form-group">
                         <p>Graduation Year</p>
-                        <input 
+                        <input
                           type="text"
                           name="graduation_year"
                           value={profile.graduation_year}
@@ -288,7 +298,7 @@ const Personal = ({isUser, userId}) => {
                       </div>
                       <div className="form-group">
                         <p>Enrollment Date (YYYY-MM-DD)</p>
-                        <input 
+                        <input
                           type="text"
                           name="enrollment_date"
                           value={profile.enrollment_date}
@@ -297,7 +307,7 @@ const Personal = ({isUser, userId}) => {
                       </div>
                       <div className="form-group">
                         <p>LinkedIn URL</p>
-                        <input 
+                        <input
                           type="text"
                           name="linkedin_url"
                           value={profile.linkedin_url}
@@ -306,7 +316,7 @@ const Personal = ({isUser, userId}) => {
                       </div>
                       {/* <div className="form-group">
                         <p>Email</p>
-                        <input 
+                        <input
                           type="text"
                           name="email"
                           value={profile.email}
@@ -323,12 +333,12 @@ const Personal = ({isUser, userId}) => {
 
               {/* profile picture */}
               <img src={profile.profile_img_url} alt="Profile" className="profile-picture" />
-              
+
               {/* camera button */}
               {isUser && (
                 <Popover width={300} opened={opened} closeOnClickOutside={false} closeOnEscape={false} onClose={() => setOpened(false)} trapFocus position="bottom" withArrow shadow="md">
                   <Popover.Target>
-                    <button onClick={() => setOpened(true)} className="camera-button"> 
+                    <button onClick={() => setOpened(true)} className="camera-button">
                       <img src={camera} alt="Camera" className="camera"/>
                     </button>
                   </Popover.Target>
@@ -368,15 +378,15 @@ const Personal = ({isUser, userId}) => {
                 </Dropzone>
                   <div className='filters-footer'>
                     <div className='confirm-button'>
-                      <Button 
-                              styles={{root: {color: "black"}}} autoContrast="false" variant="filled" color="#D9D9D9" 
+                      <Button
+                              styles={{root: {color: "black"}}} autoContrast="false" variant="filled" color="#D9D9D9"
                               radius="xl" onClick={() => { setOpened(false);}} size="xs">
                                   Confirm
                       </Button>
                     </div>
                     <div className='cancel-button'>
-                      <Button 
-                              styles={{root: {color: "black"}}} autoContrast="false" variant="filled" color="#D9D9D9" 
+                      <Button
+                              styles={{root: {color: "black"}}} autoContrast="false" variant="filled" color="#D9D9D9"
                               radius="xl" onClick={() => { setOpened(false);}} size="xs">
                                   Cancel
                       </Button>
@@ -384,14 +394,14 @@ const Personal = ({isUser, userId}) => {
                   </div>
                 </Popover.Dropdown>
                 </Popover>
-                
+
               )}
             </div>
 
             <div className="header-content">
               <h1 className="name">{profile.full_name}</h1>
               <p className="user-tag">@{parseEmail(profile.email)} &nbsp; | &nbsp; {profile.pronouns}</p>
-              
+
               {/* edit profile button */}
               {isUser && (
                 <button className="edit-icon" style={{padding: "15px 0px 0px 0px"}} onClick={togglePopup}>edit profile</button>
@@ -407,14 +417,14 @@ const Personal = ({isUser, userId}) => {
                     <img src={gmail64} alt="gmail"/>
                   </button>
                 )}
-                
+
                 {profile.linkedin_url ? (
                   <button onClick={() => {
-                    const url = profile.linkedin_url.startsWith('http') 
-                      ? profile.linkedin_url 
+                    const url = profile.linkedin_url.startsWith('http')
+                      ? profile.linkedin_url
                       : `https://${profile.linkedin_url}`;
                     window.open(url, '_blank');
-                  }} 
+                  }}
                   className="linkedin">
                     <img src={linkedin64} alt="gmail"/>
                   </button>

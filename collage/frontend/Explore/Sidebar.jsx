@@ -20,26 +20,29 @@ const Sidebar = () => {
         .then((response) => setData(response.data))
         .catch((err) => console.error(err))
     }, [])
-    
+
     function formatDate(dateString) {
         // Create a new Date object from the date string
-        var date = new Date(dateString);
-        // Define options for formatting
-        var options = { month: 'long', day: 'numeric' };
-        // Format the date to "Month Day"
-        return date.toLocaleDateString('en-US', options);
+        // console.log(data.enrollment_date);
+        const date = new Date(dateString);
+
+        // Extract the month and day in UTC
+        const month = date.toLocaleString('en-US', { month: 'long', timeZone: 'UTC' });
+        const day = date.getUTCDate();
+
+        return `${month} ${day}`;
     }
 
     return (
         <div className="full-bar">
           <div className="prof-header-container">
             <Image src={ fullLogo } className="collage-header"/>
-            <Image radius="md" src={ data.prof_pic } className="prof-pic" /> 
+            <Image radius="md" src={ data.prof_pic } className="prof-pic" />
           </div>
 
           <h2 style={{ textAlign: "center" }}>{data.full_name}</h2>
           <p style={{ textAlign: "center", padding:"0% 7% 0% 7%"}}>
-            {data.major && <span>{data.major} Major</span>} 
+            {data.major && <span>{data.major} Major</span>}
             {data.minor && <span> and {data.minor} Minor</span>}
             {data.college && <span> at {data.college}</span>}
           </p>
@@ -55,7 +58,7 @@ const Sidebar = () => {
               <p>{data.follower_count}</p>
             </div>
           </div>
-          
+
           <div style={{borderBottom: "1px solid #ECECEC"}} className="social-grid">
             <div className="social-titles">
               <p>Graduation year</p>

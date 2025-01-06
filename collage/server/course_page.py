@@ -4,6 +4,17 @@ import flask
 import mysql.connector
 from collage.server.agent import collage_ai_agent, form_prompt_2
 from flask_jwt_extended import jwt_required
+from firebase_admin import credentials, auth, initialize_app, storage
+from collage.server.pdf_parser import extract_text_from_pdf
+import json
+import os
+
+# initialize_app(
+#     credentials.Certificate(json.loads(os.environ['FIREBASE_CONFIG'])),
+#     {
+#         "storageBucket": "collage-849c3.appspot.com"
+#     }
+# )
 
 @collage.app.route('/api/course/<int:course_id>', methods=['GET'])
 @jwt_required()
@@ -76,18 +87,67 @@ def ai_course_finder():
     user_input = request.json.get('query')
     course_data = request.json.get('course', {})
     active_tab = request.json.get('tab', 'Academic')
+    history = request.json.get('history', [])
+    # print(f"history: {history}")
 
-    # Fetch course details from the payload
     course_name = course_data.get('name', 'the course')
     course_description = course_data.get('description', '')
     credits = course_data.get('credits', '')
     department = course_data.get('department', '')
     tags = ', '.join(course_data.get('tags', []))
 
-    # Construct the prompt with course-specific information
-    prompt = form_prompt_2(course_name, course_description, credits, department, tags, active_tab)
+    connection = collage.model.get_db()
+    # with connection.cursor(dictionary=True) as cursor:
+    #     cursor.execute(
+    #         "SELECT * FROM user_keywords WHERE user_id = %s", (flask.session['user_id'],))
+    #     user_keywords = cursor.fetchone()
+    #     if user_keywords is not None:
+    #         user_keywords = user_keywords["keywords"]
+    #     else:
+    #         user_keywords = ""
+    resume = ""
+    uid = flask.session['uid']
+    resume_path = f"users/{uid}/resume.pdf"
+    bucket = storage.bucket("collage-849c3.appspot.com")
+    blob = bucket.blob(resume_path)
 
-    response = collage_ai_agent(user_input, prompt)
+    if not blob.exists():
+        print("Warning: resume not found")
+    else:
+        temp_path = f"/tmp/{uid}_resume.pdf"
+        blob.download_to_filename(temp_path)
+        resume = extract_text_from_pdf(temp_path)
+
+    user_email = flask.session['current_user']
+    cursor = connection.cursor(dictionary=True)
+    user_id_query = """
+        SELECT user_id
+        FROM users
+        WHERE email = %s
+    """
+    cursor.execute(user_id_query, (user_email,))
+    user_id = cursor.fetchone()['user_id']
+
+    with connection.cursor(dictionary=True) as cursor:
+        query = """
+            SELECT *
+            FROM users
+            WHERE user_id = %s
+        """
+        cursor.execute(query, (user_id,))
+        student_info = cursor.fetchone()
+
+    student_info_prompt = str(student_info)
+
+    # Construct prompt with conversational history
+    history_text = "\n".join(
+        [f"{msg['role']}: {msg['content']}" for msg in history])
+    system_prompt = form_prompt_2(
+        student_info_prompt, course_name, course_description, credits, department, tags, active_tab, resume
+    )
+    system_prompt += f"Previous conversation history:\n{history_text}\n"
+
+    response = collage_ai_agent(system_prompt, user_input)
     return jsonify({'response': response})
 
 
@@ -117,13 +177,14 @@ def save_course():
         else:
             return jsonify({'error': 'Database error'}), 500
 
+
 @collage.app.route('/api/get-saved-courses/<int:user_id>', methods=['GET'])
 @jwt_required()
 def get_saved_courses(user_id):
     try:
         connection = collage.model.get_db()
         with connection.cursor(dictionary=True) as cursor:
-            print(flask.session['user_id'])
+            # print(flask.session['user_id'])
             query = """
                 SELECT course_id
                 FROM saved_courses
@@ -162,12 +223,13 @@ def get_saved_courses(user_id):
 
             return jsonify({"courses": course_details}), 200
 
-    except mysql.connector.Error as err: 
+    except mysql.connector.Error as err:
         print("Error:", err)
         if err.errno == 1062:
             return jsonify({'error': 'Course already saved'}), 400
         else:
             return jsonify({'error': 'Database error'}), 500
+
 
 @collage.app.route('/api/is-course-saved/<int:course_id>', methods=['GET'])
 @jwt_required()
@@ -176,13 +238,13 @@ def is_course_saved(course_id):
         connection = collage.model.get_db()
         with connection.cursor(dictionary=True) as cursor:
             query = """
-                SELECT course_id 
+                SELECT course_id
                 FROM saved_courses
                 WHERE user_id = %s AND course_id = %s
             """
 
             cursor.execute(query, (flask.session['user_id'], course_id))
-            course = cursor.fetchone();
+            course = cursor.fetchone()
             if course is None:
                 return jsonify({'is_saved': False}), 200
             else:
@@ -214,27 +276,28 @@ def top_six_followers():
     connection = collage.model.get_db()
     with connection.cursor(dictionary=True) as cursor:
         query = """
-            SELECT 
-                u.user_id AS id, 
-                u.full_name AS name, 
+            SELECT
+                u.user_id AS id,
+                u.full_name AS name,
                 u.major,
-                u.profile_img_url AS profileImage, 
+                u.profile_img_url AS profileImage,
                 u.followers_count
-            FROM 
+            FROM
                 users u
-            LEFT JOIN 
+            LEFT JOIN
                 connections c
-            ON 
-                u.user_id = c.followed_id 
+            ON
+                u.user_id = c.followed_id
                 AND c.follower_id = %s
                 AND (c.relationship = 'following' OR c.relationship = 'pending')
-            WHERE 
+            WHERE
                 c.follower_id IS NULL
                 AND u.user_id != %s
-            ORDER BY 
+            ORDER BY
                 u.followers_count DESC
             LIMIT 6;
         """
-        cursor.execute(query, (flask.session['user_id'], flask.session['user_id']))
+        cursor.execute(
+            query, (flask.session['user_id'], flask.session['user_id']))
         results = cursor.fetchall()
         return jsonify(results), 200

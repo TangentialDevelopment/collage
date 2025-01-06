@@ -26,9 +26,9 @@ def get_registration_info(user_id):
             # user_data = cursor.fetchone()
 
             personal_info_query = """
-                SELECT users.profile_img_url, users.full_name, users.pronouns, users.major, users.minor, users.college, users.graduation_year, users.enrollment_date, users.email, users.linkedin_url, 
-                (SELECT COUNT(*) FROM connections c WHERE c.followed_id = users.user_id AND relationship = 'following') AS follower_count, 
-                (SELECT COUNT(*) FROM connections c WHERE c.follower_id = users.user_id AND relationship = 'following') AS following_count 
+                SELECT users.profile_img_url, users.full_name, users.pronouns, users.major, users.minor, users.college, users.graduation_year, users.enrollment_date, users.email, users.linkedin_url,
+                (SELECT COUNT(*) FROM connections c WHERE c.followed_id = users.user_id AND relationship = 'following') AS follower_count,
+                (SELECT COUNT(*) FROM connections c WHERE c.follower_id = users.user_id AND relationship = 'following') AS following_count
                 FROM users WHERE users.user_id = %s
             """
             cursor.execute(personal_info_query, (user_id,))
@@ -52,6 +52,32 @@ def update_pfp():
         cursor.execute(update_query, (data['profile_img_url'], session['current_user']))
     connection.commit()
     return jsonify(success=True), 200 # also send back any other needed information later
+
+@collage.app.route('/api/update-schedule', methods=['POST'])
+@jwt_required()
+def update_schedule():
+    data = request.get_json()
+    connection = collage.model.get_db()
+    with connection.cursor(dictionary=True) as cursor:
+        update_query = """
+            UPDATE users SET schedule_ics_url = %s WHERE user_id = %s
+        """
+        cursor.execute(update_query, (data['schedule_img_url'], data['user_id']))
+    connection.commit()
+    return jsonify(success=True), 200
+
+@collage.app.route('/api/get-schedule/<int:user_id>', methods=['GET'])
+@jwt_required()
+def get_schedule(user_id):
+    connection = collage.model.get_db()
+    with connection.cursor(dictionary=True) as cursor:
+        query = """
+            SELECT schedule_ics_url FROM users WHERE user_id = %s
+        """
+        cursor.execute(query, (user_id,))
+        url = cursor.fetchone()['schedule_ics_url']
+    connection.commit()
+    return jsonify(schedule_ics_url=url), 200
 
 @collage.app.route('/api/test-pfp', methods=['GET'])
 @jwt_required()
@@ -82,10 +108,9 @@ def update_profile():
     minor = data['minor']
     user_id = data['user_id']
     connection = collage.model.get_db()
-    print(info['enrollment_date'])
     with connection.cursor(dictionary=True) as cursor:
         update_query = """
-            UPDATE users 
+            UPDATE users
             SET full_name = %s, pronouns = %s, major = %s, minor = %s, college = %s, graduation_year = %s, enrollment_date = %s, linkedin_url = %s, email = %s
             WHERE user_id = %s
         """

@@ -1,12 +1,15 @@
 import os
-import requests
 import flask
 from flask import jsonify, request
 import collage
 from dotenv import load_dotenv
-from flask_jwt_extended import create_access_token, JWTManager,jwt_required
+from flask_jwt_extended import create_access_token, JWTManager, jwt_required
 from flask_cors import CORS
-from collage.server.nlp import get_semantic_similarity
+from firebase_admin import credentials, auth, initialize_app, storage
+from sklearn.feature_extraction.text import TfidfVectorizer
+import json
+from itsdangerous import URLSafeSerializer, BadData
+from collage.server.pdf_parser import extract_text_from_pdf
 
 CORS(collage.app)
 # Initialize JWTManager
@@ -19,6 +22,98 @@ load_dotenv()  # Load the environment variables from the .env file
 GOOGLE_CLIENT_ID = os.environ['GOOGLE_CLIENT_ID']
 GOOGLE_SECRET_KEY = os.environ['GOOGLE_SECRET_KEY']
 
+initialize_app(
+    credentials.Certificate(json.loads(os.environ['FIREBASE_CONFIG'])),
+    {
+        "storageBucket": "collage-849c3.appspot.com"
+    }
+)
+
+def extract_keywords_from_resume(file_path):
+    """
+    Extract keywords from a resume PDF using PyPDF2 and TF-IDF.
+
+    Args:
+        file_path (str): Path to the resume PDF.
+
+    Returns:
+        list: List of extracted keywords.
+    """
+    # Extract text from the PDF
+    text = extract_text_from_pdf(file_path)
+
+    if not text.strip():
+        raise ValueError("No text could be extracted from the PDF.")
+
+    vectorizer = TfidfVectorizer(max_features=30, stop_words='english')
+    tfidf_matrix = vectorizer.fit_transform([text])
+    feature_names = vectorizer.get_feature_names_out()
+
+    # Use the TF-IDF scores to sort keywords
+    tfidf_scores = tfidf_matrix.toarray()[0]  # Get scores for the single document
+    keywords_with_scores = sorted(
+        zip(feature_names, tfidf_scores),
+        key=lambda x: x[1],
+        reverse=True
+    )
+
+    keywords = [word for word, score in keywords_with_scores]
+    return keywords
+
+# @collage.app.route('/api/update-keywords/', methods=['POST'])
+# @jwt_required()
+def update_user_keywords():
+    connection = collage.model.get_db()
+    uid = flask.session['uid']
+
+    with connection.cursor(dictionary=True) as cursor:
+        cursor.execute("SELECT * FROM user_keywords WHERE user_id = %s", (flask.session['user_id'],))
+        user_keywords = cursor.fetchone()
+        if user_keywords is None:
+            # Fetch and parse the resume
+            resume_path = f"users/{uid}/resume.pdf"
+            bucket = storage.bucket("collage-849c3.appspot.com")
+            blob = bucket.blob(resume_path)
+
+            if not blob.exists():
+                print("Warning: resume not found")
+                return ""
+
+            temp_path = f"/tmp/{uid}_resume.pdf"
+            blob.download_to_filename(temp_path)
+
+            user_keywords = extract_keywords_from_resume(temp_path)
+            user_keywords = ','.join(user_keywords)
+
+            cursor.execute(
+                "INSERT INTO user_keywords (user_id, keywords) VALUES (%s, %s)",
+                (flask.session['user_id'], user_keywords)
+            )
+            print(f"Success: inserted keywords: {user_keywords}")
+            connection.commit()
+            return user_keywords
+        return user_keywords["keywords"]
+
+def calculate_similarity(user_keywords, course_keywords):
+    # Normalize to lowercase for case-insensitive matching
+    user_keywords_set = {keyword.lower() for keyword in user_keywords}
+
+    # Tokenize course keywords into words or subwords, and normalize to lowercase
+    course_words = set()
+    for phrase in course_keywords:
+        words = phrase.lower().split()  # Convert to lowercase and split
+        course_words.update(words)
+
+    # Compute overlap with subword matching
+    overlap = sum(1 for user_word in user_keywords_set if any(user_word in course_word for course_word in course_words))
+    # total = len(user_keywords_set)
+
+    if (overlap >= 2):
+        return 1
+    elif (overlap == 1):
+        return 0.5
+    else:
+        return 0
 
 def verify_user():
     """
@@ -35,59 +130,39 @@ def home():
 
 @collage.app.route('/api/login/', methods=['POST'])
 def login():
-    auth_code = flask.request.get_json()['code']
-    if not flask.session.get('registered'):
+    id_token = request.json.get("idToken")
+    user_info = auth.verify_id_token(id_token)
+    if user_info['email'][-4:] == ".edu":
+        """
+            check here if user exists in database, if not, mark session user as unregistered, otherwise mark user as registered.
+        """
+        flask.session['current_user'] = user_info['email']
+        flask.session['profile_img_url'] = user_info['picture']
         flask.session['registered'] = False
-    data = {
-        'code': auth_code,
-        # client ID from the credential at google developer console
-        'client_id': GOOGLE_CLIENT_ID,
-        # client secret from the credential at google developer console
-        'client_secret': GOOGLE_SECRET_KEY,
-        'redirect_uri': 'postmessage',
-        'grant_type': 'authorization_code'
-    }
-
-    response = requests.post(
-        'https://oauth2.googleapis.com/token', data=data).json()
-    print(response)
-    headers = {
-        'Authorization': f'Bearer {response["access_token"]}'
-    }
-    user_info = requests.get(
-        'https://www.googleapis.com/oauth2/v3/userinfo', headers=headers).json()
-    # print(user_info)
-    if 'hd' in user_info.keys():
-        if user_info['hd'][-4:] == ".edu":
-            """
-                check here if user exists in database, if not, mark session user as unregistered, otherwise mark user as registered.
-            """
-            flask.session['current_user'] = user_info['email']
-            flask.session['profile_img_url'] = user_info['picture']
-            flask.session['registered'] = False
-            connection = collage.model.get_db()
-            with connection.cursor(dictionary=True) as cursor:
-                user_query = """
-                            SELECT *
-                            FROM users
-                            WHERE email = %s
-                        """
-                cursor.execute(user_query, (user_info['email'],))
-                result = cursor.fetchone()
-                if result is None:
-                    flask.session['registered'] = False
-                else:
-                    flask.session['user_id'] = result['user_id']
-                    flask.session['registered'] = True
-            jwt_token = create_access_token(
-                identity=user_info['email'])  # create jwt token
-            # change the response to whatever is needed for other frontend operations
-            response = flask.jsonify(
-                status="success", user=user_info, registered=flask.session['registered'])
-            response.set_cookie('access_token', value=jwt_token, secure=True)
-            return response, 200
+        flask.session['uid'] = user_info['uid']
+        connection = collage.model.get_db()
+        with connection.cursor(dictionary=True) as cursor:
+            user_query = """
+                        SELECT *
+                        FROM users
+                        WHERE email = %s
+                    """
+            cursor.execute(user_query, (user_info['email'],))
+            result = cursor.fetchone()
+            if result is None:
+                flask.session['registered'] = False
+            else:
+                flask.session['user_id'] = result['user_id']
+                flask.session['registered'] = True
+        jwt_token = create_access_token(
+            identity=user_info['email'])  # create jwt token
+        # change the response to whatever is needed for other frontend operations
+        response = flask.jsonify(
+            status="success", registered=flask.session['registered'])
+        response.set_cookie('access_token', value=jwt_token, secure=True)
+        return response, 200
     else:
-        # print("login_failure")
+        print("login_failure")
         return flask.jsonify(status="failed"), 400
 
 
@@ -117,7 +192,6 @@ def signup():
         result = cursor.fetchone()
         flask.session['user_id'] = result['user_id']
     connection.commit()
-    print(data)
     # also send back any other needed information later
     return flask.jsonify(registered=True), 200
 
@@ -126,7 +200,7 @@ def signup():
 @jwt_required()
 def current_user():
     # print(flask.session['current_user'].split('@')[0])
-    return flask.jsonify({'current_user': flask.session['current_user'].split('@')[0]}), 200
+    return flask.jsonify({'current_user': flask.session['current_user'].split('@')[0], 'uid': flask.session['uid']}), 200
 
 @collage.app.route('/api/current-user-id/', methods=['GET'])
 @jwt_required()
@@ -149,6 +223,7 @@ def logout():
     flask.session['registered'] = False
     flask.session['current_user'] = None
     flask.session['user_id'] = None
+    flask.session['uid'] = None
     jwt_token = flask.request.cookies.get('access_token') # Demonstration how to get the cookie
     # current_user = get_jwt_identity()
     return flask.jsonify(registered=False), 200
@@ -295,6 +370,11 @@ def search_with_filters():
         cursor.execute(query)
         results = cursor.fetchall()
 
+        with connection.cursor(dictionary=True) as cursor:
+            user_keywords = update_user_keywords()
+            if (user_keywords != ""):
+                user_keywords = user_keywords.split(',')
+
         for item in results:
             # Extract course tags
             course_tags = [item[f'tag_{str(i)}'] for i in range(1, 6) if item[f'tag_{str(i)}']]
@@ -306,7 +386,10 @@ def search_with_filters():
                 item['rating'] = item['total_rating'] / item['num_ratings']
 
             # Calculate semantic match for tags
-            semantic_score = get_semantic_similarity()
+            semantic_score = calculate_similarity(user_keywords, course_tags)
+            # if (semantic_score > 0):
+                # print(f"Semantic score is greater than 0: {semantic_score}")
+            # print(f"semantic score: {semantic_score}")
 
             # Normalize the number of saves
             max_saves = max([r['save_count'] for r in results]) if results else 1
@@ -315,11 +398,14 @@ def search_with_filters():
             else:
                 save_score = 0
 
+            semantic_weight = 0.5
+            rating_weight = 0.3
+            save_weight = 1 - semantic_weight - rating_weight
             # Combine semantic score, rating, and save score for percent match
             item['percent_match'] = round((
-                0.2 * semantic_score +
-                0.5 * (item['rating'] / 5) +
-                0.3 * save_score
+                semantic_weight * semantic_score +
+                rating_weight * (item['rating'] / 5) +
+                save_weight * save_score
             ) * 100)
 
             if item['credit_hours'] == 1:
@@ -358,14 +444,12 @@ def update_rating():
                 """
         cursor.execute(check_query, (flask.session['current_user'], data['course_id']))
         results = cursor.fetchall()
-        print(results)
         # print(results)
         rating_query = """
                     SELECT total_rating, num_ratings FROM courses WHERE course_id = %s
                 """
         cursor.execute(rating_query, (data['course_id'],))
         rating_results = cursor.fetchall()[0]
-        print(rating_results)
         # if user has already rated then replace old data
         if len(results) > 1:
             update_course = """UPDATE courses SET total_rating = %s WHERE course_id = %s"""
@@ -523,14 +607,13 @@ def get_user_stats():
 @jwt_required()
 def view_profile():
     viewed_id = request.get_json()['viewed_id']
-    print("VIEWED ID", viewed_id)
     connection = collage.model.get_db()
     with connection.cursor(dictionary=True) as cursor:
         query = """
             INSERT INTO profileViewers (viewer_id, viewed_id) VALUES (%s, %s)
         """
         cursor.execute(query, (flask.session['user_id'], viewed_id))
-    
+
     connection.commit()
     return jsonify(status='success'), 200
 
@@ -538,6 +621,41 @@ def view_profile():
 # def search_classes(serach_string, user_id):
 #     # take things in as a json object
 #     search_params = flask.request.get_json()
+
+@collage.app.route('/api/unsubscribe/<token>')
+def unsubscribe(token):
+    s = URLSafeSerializer(collage.app.secret_key, salt='unsubscribe')
+    try:
+        email = s.loads(token)
+        connection = collage.model.get_db()
+        with connection.cursor() as cursor:
+            following_query = """
+                UPDATE users
+                SET subscribed=%s
+                WHERE email=%s
+            """
+            cursor.execute(following_query, (False, email))
+    except BadData:
+        return flask.jsonify(error="Invalid link"), 400
+    return flask.jsonify(success=True), 200
+
+# def send_email():
+#     s = URLSafeSerializer(app.secret_key, salt='unsubscribe')
+#     token = s.dumps(user.email)
+#     url = url_for('unsubscribe', token=token)
+
+@collage.app.route('/api/get-mailing/', methods=['GET'])
+def fetch_subscribed():
+    connection = collage.model.get_db()
+    with connection.cursor() as cursor:
+        following_query = """
+            SELECT email
+            FROM users
+            WHERE subscribed = %s
+        """
+        cursor.execute(following_query, (True,))
+        return flask.jsonify(subscribed_users=[email[0] for email in cursor.fetchall()]), 200
+
 
 
 @collage.app.route('/api/delete/', methods=['GET'])

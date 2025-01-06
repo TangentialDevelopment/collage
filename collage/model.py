@@ -18,7 +18,8 @@ def get_db():
             port=os.getenv("DB_PORT"),
             user=os.getenv('DB_USER'),
             password=os.getenv('DB_PASSWORD'),
-            database=os.getenv('DB_DATABASE')
+            database=os.getenv('DB_DATABASE'),
+            auth_plugin='mysql_native_password'
         )
     return g.db
 

@@ -43,6 +43,7 @@
     "postcss-preset-mantine": "^1.15.0",
     "postcss-simple-vars": "^7.0.1",
     "prettier": "^3.2.4",
+    "react-error-overlay": "^6.0.1",
     "start-server-and-test": "^2.0.3",
     "tmp": "^0.2.1",
     "ts-loader": ">=9.5.1",

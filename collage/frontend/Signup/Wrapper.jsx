@@ -6,9 +6,9 @@ import '@mantine/core/styles/Button.css';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, getDocs } from 'firebase/firestore/lite';
 import { ref, getStorage, getDownloadURL, uploadBytesResumable } from "firebase/storage";
+import axios from 'axios';
 import Cookies from 'js-cookie';
 import fullLogo from '../images/dark-logo.svg';
-// TODO: Replace the following with your app's Firebase project configuration
 const firebaseConfig = {
     apiKey: 'AIzaSyDc5B7m__Z77iTyQYmb9cXxrn7Bo3a9C18',
     authDomain: "collage-849c3.firebaseapp.com",
@@ -57,7 +57,7 @@ const Signup = ({setLoggedIn, setRegistered}) => {
       },)
       .then((response) => response.json())
       .then((data) => { setCurrUser(data.current_user);});
-    }   
+    }
     useEffect(() => {fetchCurrUser()}, []);
 
   const handleNext = (e) => {
@@ -74,29 +74,36 @@ const Signup = ({setLoggedIn, setRegistered}) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    axios.get(`/api/current-user`, {
+      headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${Cookies.get('access_token')}`,
+      },
+  })
+  .then((response) => {
     if (resumeFile){
-        const storageRef = ref(storage, `${currUser}/resume.pdf`);
-        const uploadTask = uploadBytesResumable(storageRef, resumeFile);
-        
-        uploadTask.on("state_changed", (snapshot) => {
-            const prog = Math.round(
-            (snapshot.bytesTransferred / snapshot.totalBytes) * 100
-            );
-            // Don't fetch downloadURL here, just track progress
-        },
-        // (err) => console.log(err),
-        () => {
-            // Get download URL here
-            getDownloadURL(uploadTask.snapshot.ref).then((url) => {
-            // console.log(url)
-            })
-        }
-        );
+      const storageRef = ref(storage, `${response.data.uid}/resume.pdf`);
+      const uploadTask = uploadBytesResumable(storageRef, resumeFile);
+
+      uploadTask.on("state_changed", (snapshot) => {
+          const prog = Math.round(
+          (snapshot.bytesTransferred / snapshot.totalBytes) * 100
+          );
+          // Don't fetch downloadURL here, just track progress
+      },
+      // (err) => console.log(err),
+      () => {
+          // Get download URL here
+          getDownloadURL(uploadTask.snapshot.ref).then((url) => {
+          // console.log(url)
+          })
+      }
+      );
     }
     if (transcriptFile){
-        const storageRef1 = ref(storage, `${currUser}/transcript.pdf`);
+        const storageRef1 = ref(storage, `${response.data.uid}/transcript.pdf`);
         const uploadTask1 = uploadBytesResumable(storageRef1, transcriptFile);
-        
+
         uploadTask1.on("state_changed", (snapshot) => {
             const prog = Math.round(
             (snapshot.bytesTransferred / snapshot.totalBytes) * 100
@@ -112,6 +119,9 @@ const Signup = ({setLoggedIn, setRegistered}) => {
         }
         );
     }
+  })
+  .catch((err) => console.error(err));
+
     var response = await fetch("/api/signup/", {
         method: "POST",
         credentials: "include",
@@ -119,7 +129,7 @@ const Signup = ({setLoggedIn, setRegistered}) => {
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${Cookies.get('access_token')}`,
-        }, 
+        },
         body: JSON.stringify({full_name: firstName + " " + lastName,
                               start_year: startYear,
                               graduation_year: gradYear,

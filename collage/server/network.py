@@ -153,7 +153,7 @@ def get_connects(user_id):
                 ) AS top_two_mutuals
             FROM users u
             LEFT JOIN connections c ON u.user_id = c.followed_id AND c.follower_id = %s
-            WHERE u.user_id != %s AND c.follower_id IS NULL 
+            WHERE u.user_id != %s AND c.follower_id IS NULL
             AND NOT EXISTS (
                 SELECT 1
                 FROM connections req
@@ -177,8 +177,6 @@ def follow_user():
     data = request.get_json()
     follower_id = flask.session['user_id']
     followed_id = data['follow_id']
-    print(follower_id)
-    print(followed_id)
     connection = collage.model.get_db()
     try:
         with connection.cursor(dictionary=True) as cursor:

@@ -3,9 +3,12 @@ import { IconCircleArrowLeft } from '@tabler/icons-react';
 import { ActionIcon, rem } from '@mantine/core';
 import '../CSS/classPreview.css';
 import '../CSS/course_tag.css';
-const Preview = lazy(() => import('./Preview'))
-const SuggestedConnections = lazy(() => import('./SuggestedConnections'))
-const ChatBox = lazy(() => import('./ChatBox'))
+// const Preview = lazy(() => import('./Preview'))
+// const SuggestedConnections = lazy(() => import('./SuggestedConnections'))
+// const ChatBox = lazy(() => import('./ChatBox'))
+import Preview from './Preview';
+import SuggestedConnections from './SuggestedConnections';
+import ChatBox from './ChatBox';
 
 const IndividualCourse = ({courseId, handleBack, refetch, handleExploreMore, percentMatch}) => {
     return (

@@ -1,0 +1,26 @@
+.content {
+    margin: 0 40px;
+}
+
+h2 {
+    font-weight: 800;
+}
+
+.bold {
+    font-weight: 800;
+}
+
+.italic {
+    font-style: italic;
+}
+
+.notice {
+    font-weight: 800;
+    font-size: 24px;
+}
+
+.subtitle {
+    text-decoration: underline;
+    font-weight: 600;
+    font-size: 18px;
+}

@@ -15,7 +15,18 @@ CREATE TABLE users (
     profile_img_url VARCHAR(255),
     schedule_ics_url VARCHAR(255),
     linkedin_url VARCHAR(255),
+    subscribed BOOLEAN DEFAULT true,
     followers_count INT DEFAULT 0
+);
+
+CREATE TABLE user_keywords (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT NOT NULL,
+    keywords TEXT NOT NULL,
+    resume_last_parsed TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
 CREATE TABLE instructors (

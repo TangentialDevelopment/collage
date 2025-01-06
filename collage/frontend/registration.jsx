@@ -11,14 +11,17 @@ const FileUpload = lazy(() => import('./UserProfile/FileUpload'));
 const Requests = lazy(() => import('./Network/Requests'));
 const Savedcourses = lazy(() => import('./UserProfile/Savedcourses'));
 const UserProfile = lazy(() => import('./UserProfile/UserProfile'));
-const Schedule = lazy(() => import('./UserProfile/Schedule'));
-const ActivityGlimpse = lazy(() => import('./UserProfile/ActivityGlimpse'));
+// const Schedule = lazy(() => import('./UserProfile/Schedule'));
+// const ActivityGlimpse = lazy(() => import('./UserProfile/ActivityGlimpse'));
 // const Dev = lazy(() => import('./HomeWrapper'));
 const Dev = lazy(() => import('./Dev'));
+const Footer = lazy(() => import('./Footer/Footer'));
 const Home = lazy(() => import('./HomeWrapper'));
 const NetworkWrapper = lazy(() => import('./Network/NetworkWrapper'));
 const Loading = lazy(() => import('./loading/LoadScreen'));
 const Signup4 = lazy(() => import('./Signup/Signup-4'));
+const Privacy = lazy(() => import('./Legal/PrivacyPolicy'));
+const Terms = lazy(() => import('./Legal/TermsConditions'));
 
 export default function Registration() {
   const [loggedIn, setLoggedIn] = useState(false);
@@ -44,6 +47,9 @@ export default function Registration() {
               <Route path="/collage/home" element={<Home />} />
               <Route path="/collage/network" element={<NetworkWrapper/>}/>
               <Route path="/collage/loading" element={<Loading/>}/>
+              <Route path="/collage/Footer" element={<Footer/>}/>
+              <Route path="/collage/PrivacyPolicy" element={<Privacy/>}/>
+              <Route path="/collage/Terms" element={<Terms/>}/>
             </Routes>
           </div>
         </Router>

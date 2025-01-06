@@ -5,47 +5,66 @@ import { useGoogleLogin } from "@react-oauth/google";
 import '../CSS/Signup.css';
 import googleLogo from '../images/google-logo.png';
 import fullLogo from '../images/dark-logo.svg';
+import { initializeApp } from "firebase/app";
+import { getAuth, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 
-async function getUserInfo(codeResponse) {
-  var response = await fetch("/api/login/", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ code: codeResponse.code }),
-  });
-  return await response.json();
-}
+const firebaseConfig = {
+  apiKey: 'AIzaSyDc5B7m__Z77iTyQYmb9cXxrn7Bo3a9C18',
+  authDomain: "collage-849c3.firebaseapp.com",
+  projectId: "collage-849c3",
+  storageBucket: "collage-849c3.appspot.com",
+  messagingSenderId: "302505148937",
+  appId: "1:302505148937:web:05f9caf3eb3bf860ac2ed8",
+  measurementId: "G-FZFTH0MVNY"
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+
+export const signInWithGoogle = async () => {
+  const provider = new GoogleAuthProvider();
+  const result = await signInWithPopup(auth, provider);
+  return result.user; // Contains user information
+};
 
 const Login = ({loggedIn, setLoggedIn, registered, setRegistered}) => {
-  const navigate = useNavigate();
   const [invalidLogin, setInvalidLogin] = useState(false);
-  const googleLogin = useGoogleLogin({
-    flow: "auth-code",
-    onSuccess: async (codeResponse) => {
-      var loginDetails = await getUserInfo(codeResponse);
-      if (loginDetails.status === "failed"){
-        setInvalidLogin(true);
-        // alert('Please make sure you login with your .edu email.')
-      }
-      else{
-        setLoggedIn(true);
-        // console.log(loginDetails.registered);
-
-        if (loginDetails.registered === true){
-          setRegistered(true);
-          navigate("/collage/home");
+  const navigate = useNavigate();
+  const handleLogin = async () => {
+    try {
+      const user = await signInWithGoogle();
+      // Send the user's ID token to the backend
+      const idToken = await user.getIdToken();
+      const loginResult = await fetch("/api/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ idToken }),
+      }).then((response) => response.json())
+        .then((data) => {
+        // console.log(data.registered);
+        if (data.status === "failed"){
+          setInvalidLogin(true);
+          // alert('Please make sure you login with your .edu email.')
         }
         else{
-          setRegistered(false);
-          navigate("/collage/signup");
+          setLoggedIn(true);
+          // console.log(loginDetails.registered);
+
+          if (data.registered === true){
+            setRegistered(true);
+            navigate("/collage/home");
+          }
+          else{
+            setRegistered(false);
+            navigate("/collage/signup");
+          }
         }
-      }
-    },
-    onError: async (codeResponse) => {
-      // console.log("failed");
+      });
+    } catch (error) {
+      console.error("Login failed", error);
     }
-  });
+  };
 
   return (
     <div className="wrapper-login">
@@ -88,7 +107,7 @@ const Login = ({loggedIn, setLoggedIn, registered, setRegistered}) => {
             }}
           />
           <br />
-          <Button variant='default' fullWidth size='lg' radius='xl' leftSection={<img src={googleLogo}/>} rightSection={<span/>} onClick={() => googleLogin()}>Continue with Google</Button>
+          <Button variant='default' fullWidth size='lg' radius='xl' leftSection={<img src={googleLogo}/>} rightSection={<span/>} onClick={() => handleLogin()}>Continue with Google</Button>
         </div>
       </div>
     </div>

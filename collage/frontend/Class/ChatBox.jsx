@@ -40,7 +40,7 @@ const ChatInput = styled.input`
 const ChatBox = ({ courseId }) => {
   const [activeTab, setActiveTab] = useState('Academic');
   const [query, setQuery] = useState('');
-  const [aiResponse, setAiResponse] = useState('');
+  const [conversationHistory, setConversationHistory] = useState([]);
   const [courseData, setCourseData] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -58,10 +58,10 @@ const ChatBox = ({ courseId }) => {
         try {
           const response = await axios.get(`/api/individual-course/${courseId}`, {
             headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${Cookies.get('access_token')}`,
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${Cookies.get('access_token')}`,
             },
-        });
+          });
           setCourseData(response.data);
         } catch (error) {
           console.error("Error fetching course data:", error);
@@ -74,7 +74,12 @@ const ChatBox = ({ courseId }) => {
   }, [courseId]);
 
   const handleCourseFinder = async () => {
+    if (!query.trim()) return;
+
     setLoading(true);
+    const newMessage = { role: 'user', content: query };
+    const updatedHistory = [...conversationHistory, newMessage];
+
     try {
       const payload = {
         query,
@@ -83,24 +88,35 @@ const ChatBox = ({ courseId }) => {
           description: courseData?.course_description,
           credits: courseData?.credit_hours,
           department: courseData?.department,
-          tags: [courseData?.tag_1, courseData?.tag_2, courseData?.tag_3, courseData?.tag_4, courseData?.tag_5].filter(Boolean), // Filter out any undefined tags
+          tags: [courseData?.tag_1, courseData?.tag_2, courseData?.tag_3, courseData?.tag_4, courseData?.tag_5].filter(Boolean),
         },
-        tab: activeTab
+        tab: activeTab,
+        history: updatedHistory,
       };
       setQuery('');
 
       const res = await axios.post('/api/ai-course-finder', payload, {
-          headers: {
+        headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${Cookies.get('access_token')}`,
-          },
+        },
       });
-      setAiResponse(res.data.response || 'No AI response available');
+      const aiMessage = { role: 'assistant', content: res.data.response || 'No AI response available' };
+      setConversationHistory([...updatedHistory, aiMessage]);
     } catch (error) {
       console.error('Error fetching AI response:', error);
-      setAiResponse('No AI response available');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Tab') {
+      e.preventDefault(); // Prevent the default tab behavior
+      if (!query) setQuery(placeholderQuestions[activeTab]);
+    } else if (e.key === 'Enter') {
+      e.preventDefault(); // Prevent default enter behavior
+      handleCourseFinder();
     }
   };
 
@@ -112,15 +128,20 @@ const ChatBox = ({ courseId }) => {
           <TabButton active={activeTab === 'Content'} onClick={() => handleTabChange('Content')}>Content</TabButton>
           <TabButton active={activeTab === 'Professional'} onClick={() => handleTabChange('Professional')}>Professional</TabButton>
         </div>
-        <div style={{ border: '1px solid #ccc', padding: '20px', borderRadius: '8px', marginTop: '15px', backgroundColor: '#fff', height: '100%' }}>
-          {/* {aiResponse || placeholderQuestions[activeTab]} */}
-          {loading ? "Thinking..." : aiResponse || placeholderQuestions[activeTab]}
+        <div style={{ overflowY: 'scroll', flex: 1, padding: '10px', marginTop: '15px', backgroundColor: '#fff', borderRadius: '8px' }}>
+          {conversationHistory.map((msg, index) => (
+            <div key={index} style={{ margin: '10px 0', textAlign: msg.role === 'user' ? 'right' : 'left' }}>
+              <strong>{msg.role === 'user' ? 'You:' : 'Collage AI:'}</strong> {msg.content}
+            </div>
+          ))}
+          {loading && <div>Thinking...</div>}
         </div>
         <ChatInput
           type="text"
           placeholder={placeholderQuestions[activeTab]}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={handleKeyPress} // Handle Tab and Enter keys
         />
         <button onClick={handleCourseFinder} style={{ padding: '10px', borderRadius: '8px', backgroundColor: '#333', color: '#fff', border: 'none', marginTop: '10px', cursor: 'pointer' }}>
           Ask Collage AI

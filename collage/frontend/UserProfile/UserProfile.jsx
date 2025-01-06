@@ -1,6 +1,8 @@
-import React, {lazy} from "react";
+import React, {lazy, useState, useEffect} from "react";
 import { Grid, Image } from "@mantine/core";
 import '../CSS/userProfile.css';
+import axios from 'axios';
+import Cookies from 'js-cookie';
 
 const Personal = lazy(() => import('./Personal'));
 const FileUpload = lazy(() => import('./FileUpload'));
@@ -12,8 +14,28 @@ import saved from '../images/blurredSaved.png';
 import schedule from '../images/blurredSchedule.png';
 
 function UserProfile({loggedIn, following, profileUser, handleExploreMore}) {
-    
+    const [upload, setUpload] = useState(false);
+
     // console.log("PROFILE", profileUser);
+    const [username, setUsername] = useState('');
+    useEffect(() => {
+        axios.get(`/api/current-user`, { 
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${Cookies.get('access_token')}`,
+          },
+        })
+        .then(response => {
+          setUsername(response.data['current_user']);
+          // console.log("ENROLLMENT", profile.full_name);
+        })
+        .catch(err => {console.error(err)});
+    }, []);
+
+    //changes variable back and forth every time a user uploads their schedule file, can add to dependency array for any useEffect that shows a image or profile to rerender every time something is uploaded
+    const handleUpload = () => {
+        setUpload(!upload);
+    }
     
     if (loggedIn) {
         return(
@@ -33,15 +55,15 @@ function UserProfile({loggedIn, following, profileUser, handleExploreMore}) {
                     </Grid.Col>
                     <Grid.Col span={12}>
                         <h2>Schedule Builder</h2>
-                        <p>Temporarily down :(</p>
-                        {/* <div className="builder">
-                            <FileUpload userName={profileUser}/>
-                        </div> */}
+                        {/* <p>Temporarily down :(</p> */}
+                        <div className="builder">
+                            <FileUpload userId={profileUser} handleUpload={handleUpload}/>
+                        </div>
                     </Grid.Col>
                     <Grid.Col span={12}>
                         <div className="schedule">
-                            <h2>Schedule</h2>
-                            <Schedule/>
+                            <h2>Schedule <span>(Upload a screenshot from Wolverine Access)</span></h2>
+                            <Schedule userName={username} upload={upload} isUser={loggedIn} userId={profileUser}/>
                         </div>
                     </Grid.Col>
                     <Grid.Col span={12}>
@@ -71,6 +93,7 @@ function UserProfile({loggedIn, following, profileUser, handleExploreMore}) {
                         <Grid.Col span={12}>
                             <div className="schedule">
                                 <h2>Schedule</h2>
+                                <Schedule userName={username} upload={upload} isUser={loggedIn} userId={profileUser}/>
                             </div>
                         </Grid.Col>
                         <Grid.Col span={12}>
