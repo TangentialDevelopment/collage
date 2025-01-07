@@ -15,7 +15,7 @@ const UserProfile = lazy(() => import('./UserProfile/UserProfile'));
 // const ActivityGlimpse = lazy(() => import('./UserProfile/ActivityGlimpse'));
 // const Dev = lazy(() => import('./HomeWrapper'));
 const Dev = lazy(() => import('./Dev'));
-const Footer = lazy(() => import('./Footer/Footer'));
+// const Footer = lazy(() => import('./Footer/Footer'));
 const Home = lazy(() => import('./HomeWrapper'));
 const NetworkWrapper = lazy(() => import('./Network/NetworkWrapper'));
 const Loading = lazy(() => import('./loading/LoadScreen'));
@@ -47,7 +47,7 @@ export default function Registration() {
               <Route path="/collage/home" element={<Home />} />
               <Route path="/collage/network" element={<NetworkWrapper/>}/>
               <Route path="/collage/loading" element={<Loading/>}/>
-              <Route path="/collage/Footer" element={<Footer/>}/>
+              {/* <Route path="/collage/Footer" element={<Footer/>}/> */}
               <Route path="/collage/PrivacyPolicy" element={<Privacy/>}/>
               <Route path="/collage/Terms" element={<Terms/>}/>
             </Routes>
